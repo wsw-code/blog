@@ -52,6 +52,7 @@ function createStore(reducer, preloadedState) {
   function subscribe(listenerFn) {
     listeners.push(listenerFn);
 
+    // 返回一个解除订阅的函数
     return function () {
       const index = listeners.indexOf(listenerFn);
       listeners.splice(index, 1);
@@ -120,7 +121,7 @@ store.dispatch({ type: "counter/incremented" });
    }
 ```
 
-上述意思就是防止在 dispatch 时发生订阅/解除订阅所产生的 bug,下面已一个例子来说明
+上述意思就是防止在 dispatch 时发生订阅/取消订阅所产生的 bug,下面已一个例子来说明
 
 ```javascript
 // 在简易版的redux基础上
@@ -158,7 +159,7 @@ store.dispatch({ type: "counter/incremented" });
 第六个订阅没有被取消但是跳过去了，没有触发
 ```
 
-redux 中每次 dispatch 中所做的订阅/解除订阅是不会改变当前正在遍历的订阅函数数组，而是放到下一次的 dispatch 中，我们在上一个例子上的代码后面再加一行代码`store.dispatch({ type: 'counter/incremented' })`,也就是重复两次 dispatch,使用 redux,打印结果如下：
+redux 中每次 dispatch 中所做的订阅/取消订阅是不会改变当前正在遍历的订阅函数数组，而是放到下一次的 dispatch 中，我们在上一个例子上的代码改为使用redux,然后再加一行代码`store.dispatch({ type: 'counter/incremented' })`,也就是重复两次 dispatch,打印结果如下：
 
 ```javascript
 //第一次dispatch
@@ -170,10 +171,12 @@ redux 中每次 dispatch 中所做的订阅/解除订阅是不会改变当前正
 我第六个订阅了数据;
 取消订阅第1个订阅;
 
-//第二次dispatch
+//第二次dispatch,第一个订阅已经取消了
 我第二个订阅了数据;
 我第三个订阅了数据;
 我第四个订阅了数据;
 我第五个订阅了数据;
+// 订阅没有跳过
 我第六个订阅了数据;
 ```
+
