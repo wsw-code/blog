@@ -382,7 +382,7 @@ export default function compose(...funcs) {
 //注意这里的logger1是(next) => (action)=>{},这里是简单的替代一下，方便理解
 ```
 
-然后执行`dispatch = fn(store.dispatch)`,返回一个强化后的 dispatch,这里先执行`logger2(store.dispatch)`返回`(action)=>{...}`然后返回的函数作为参数`next`传到 logger1 上`(next) => (action)=>{}`执行函数再返回`(action)=>{}`
+然后执行`dispatch = fn(store.dispatch)`,返回一个强化后的 dispatch,这里先执行`logger2(store.dispatch)`返回`(action)=>{...}`然后返回的函数作为参数`next`传到 logger1 上`(next) => (action)=>{}`执行 logger1 函数再返回`(action)=>{}`
 这里可以看到函数从里开始执行一直在返回函数并作为参数给下一个函数，所以最后形成的代码是
 
 ```javascript
@@ -432,3 +432,5 @@ export default function compose(...funcs) {
   return returnValue;
 };
 ```
+
+从上面的代码可以看出最终返回的代码结构是`(action)=>{...next()...}`这里的 next 指的是下一个中间件返回的函数也是同样的结构`(action)=>{...next()...}`,所以添加中间件就等于嵌套返回的 next 的函数，而最后一个函数中`next=store.dispatch`
