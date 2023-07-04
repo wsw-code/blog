@@ -14,7 +14,7 @@ import { useSyncExternalStore } from "react";
 let nextId = 0;
 /**外部数据 */
 let todos = [{ id: nextId++, text: "Todo #1" }];
-/**subscribe函数中的listener集合  */
+/**subscribe函数中的forceUpdate集合  */
 let listeners = [];
 
 const todosStore = {
@@ -64,3 +64,12 @@ export default function TodosApp() {
 }
 
 ```
++ 第一个参数：一个接受单独参数`forceUpdate`的函数,`forceUpdate`可以使组件重新渲染，我们使用listeners数组变量保存`forceUpdate`函数，并返回一个函数用于把`forceUpdate`从listeners数组中删除的函数，类似redux的subscribe,返回一个解除订阅的函数
++ 第二个参数：一个根据外部数据返回对应快照的函数
+
+一般使用流程大概为：
+  + 保存`forceUpdate`函数，用于外部调用
+  + `useSyncExternalStore`内部记录第二个参数返回的快照数据
+  + 改变外部数据,调用`forceUpdate`函数更新UI，`forceUpdate`内部再次调用第二个参数返回的快照数据跟上一步的快照做浅比较`Object.is`,如果不一致就会重新渲染
+  
+
