@@ -64,12 +64,70 @@ export default function TodosApp() {
 }
 
 ```
-+ 第一个参数：一个接受单独参数`forceUpdate`的函数,`forceUpdate`可以使组件重新渲染，我们使用listeners数组变量保存`forceUpdate`函数，并返回一个函数用于把`forceUpdate`从listeners数组中删除的函数，类似redux的subscribe,返回一个解除订阅的函数
-+ 第二个参数：一个根据外部数据返回对应快照的函数
+
+- 第一个参数：一个接受单独参数`forceUpdate`的函数,`forceUpdate`可以使组件重新渲染，我们使用 listeners 数组变量保存`forceUpdate`函数，并返回一个函数用于把`forceUpdate`从 listeners 数组中删除的函数，类似 redux 的 subscribe,返回一个解除订阅的函数
+- 第二个参数：一个根据外部数据返回对应快照的函数
 
 一般使用流程大概为：
-  + 保存`forceUpdate`函数，用于外部调用
-  + `useSyncExternalStore`内部记录第二个参数返回的快照数据
-  + 改变外部数据,调用`forceUpdate`函数更新UI，`forceUpdate`内部再次调用第二个参数返回的快照数据跟上一步的快照做浅比较`Object.is`,如果不一致就会重新渲染
-  
 
+- 保存`forceUpdate`函数，用于外部调用
+- `useSyncExternalStore`内部记录第二个参数返回的快照数据
+- 改变外部数据,调用`forceUpdate`函数更新 UI，`forceUpdate`内部再次调用第二个参数返回的快照数据跟上一步的快照做浅比较`Object.is`,如果不一致就会重新渲染
+
+## Provider 组件
+
+```typescript
+
+.....
+function Provider<A extends Action = AnyAction, S = unknown>({
+  /**外部数据store 例如 redux const store = legacy_createStore(reducer); */
+  store,
+  context,
+  children,
+  serverState,
+  stabilityCheck = 'once',
+  noopCheck = 'once',
+}: ProviderProps<A, S>) {
+  const contextValue = useMemo(() => {
+    /**创建订阅类收集订阅函数 */
+    const subscription = createSubscription(store)
+    return {
+      store,
+      subscription,
+      getServerState: serverState ? () => serverState : undefined,
+      stabilityCheck,
+      noopCheck,
+    }
+  }, [store, serverState, stabilityCheck, noopCheck])
+
+  const previousState = useMemo(() => store.getState(), [store])
+
+/**
+ * export const useIsomorphicLayoutEffect = canUseDOM ? useLayoutEffect : useEffect
+ * 兼容服务端环境
+ */
+  useIsomorphicLayoutEffect(() => {
+    const { subscription } = contextValue
+    subscription.onStateChange = subscription.notifyNestedSubs
+    subscription.trySubscribe()
+
+    if (previousState !== store.getState()) {
+      subscription.notifyNestedSubs()
+    }
+    return () => {
+      subscription.tryUnsubscribe()
+      subscription.onStateChange = undefined
+    }
+  }, [contextValue, previousState])
+
+  const Context = context || ReactReduxContext
+
+  // @ts-ignore 'AnyAction' is assignable to the constraint of type 'A', but 'A' could be instantiated with a different subtype
+  return <Context.Provider value={contextValue}>{children}</Context.Provider>
+}
+
+export default Provider
+
+
+
+```
