@@ -72,7 +72,7 @@ export default function TodosApp() {
 
 - 保存`forceUpdate`函数，用于外部调用
 - `useSyncExternalStore`内部记录第二个参数返回的快照数据
-- 改变外部数据,调用`forceUpdate`函数更新 UI，`forceUpdate`内部再次调用第二个参数返回的快照数据跟上一步的快照做浅比较`Object.is`,如果不一致就会重新渲染
+- 改变外部数据,调用`forceUpdate`函数更新渲染,渲染前后调用第二个参数返回的快照数据做浅比较`Object.is`,如果不一致更新值
 
 ## React-redux 使用
 
@@ -377,7 +377,7 @@ var useRef = React.useRef,
  * subscribe 用于 useSyncExternalStore的subscribe参数
  * getSnapshot 获取整个store外部数据
  * getServerSnapshot 获取整个store外部数据（服务端）
- * selector useSelector 第二个参数
+ * selector 在原有基础上强化功能 memoizedSelector作为useSelector 第二个参数
  */
 function useSyncExternalStoreWithSelector(subscribe, getSnapshot, getServerSnapshot, selector, isEqual) {
   // Use this to track the rendered snapshot.
@@ -396,16 +396,14 @@ function useSyncExternalStoreWithSelector(subscribe, getSnapshot, getServerSnaps
   }
 
   var _useMemo = useMemo(function () {
-    // Track the memoized state using closure variables that are local to this
-    // memoized instance of a getSnapshot function. Intentionally not using a
-    // useRef hook, because that state would be shared across all concurrent
-    // copies of the hook/component.
+
     var hasMemo = false;
-    //记录外部数据
+    //使用闭包记录外部数据
     var memoizedSnapshot;
-    // 记录selector函数返回快照
+    // 使用闭包记录selector函数返回快照
     var memoizedSelection;
     
+    /**增强版的selector */
     var memoizedSelector = function (nextSnapshot) {
       if (!hasMemo) {
         // The first time the hook is called, there is no memoized result.
@@ -415,9 +413,6 @@ function useSyncExternalStoreWithSelector(subscribe, getSnapshot, getServerSnaps
         var _nextSelection = selector(nextSnapshot);
 
         if (isEqual !== undefined) {
-          // Even if the selector has changed, the currently rendered selection
-          // may be equal to the new selection. We should attempt to reuse the
-          // current value if possible, to preserve downstream memoizations.
           if (inst.hasValue) {
             var currentSelection = inst.value;
 
@@ -430,31 +425,20 @@ function useSyncExternalStoreWithSelector(subscribe, getSnapshot, getServerSnaps
 
         memoizedSelection = _nextSelection;
         return _nextSelection;
-      } // We may be able to reuse the previous invocation's result.
+      } 
 
-
-      // We may be able to reuse the previous invocation's result.
       var prevSnapshot = memoizedSnapshot;
       var prevSelection = memoizedSelection;
 
-
+      /** 条件一  渲染前后对比store数据一样就返回 prevSelection*/ 
       if (objectIs(prevSnapshot, nextSnapshot)) {
-        // The snapshot is the same as last time. Reuse the previous selection.
-        //返回上一轮快照给`useSyncExternalStore`
+
         return prevSelection;
-      } // The snapshot has changed, so we need to compute a new selection.
+      }
 
 
-      // The snapshot has changed, so we need to compute a new selection.
-      var nextSelection = selector(nextSnapshot); // If a custom isEqual function is provided, use that to check if the data
-      // has changed. If it hasn't, return the previous selection. That signals
-      // to React that the selections are conceptually equal, and we can bail
-      // out of rendering.
-
-      // If a custom isEqual function is provided, use that to check if the data
-      // has changed. If it hasn't, return the previous selection. That signals
-      // to React that the selections are conceptually equal, and we can bail
-      // out of rendering.
+      var nextSelection = selector(nextSnapshot);
+      /** 条件二  渲染前后对比快照数据一样就返回 prevSelection*/ 
       if (isEqual !== undefined && isEqual(prevSelection, nextSelection)) {
         return prevSelection;
       }
@@ -462,10 +446,8 @@ function useSyncExternalStoreWithSelector(subscribe, getSnapshot, getServerSnaps
       memoizedSnapshot = nextSnapshot;
       memoizedSelection = nextSelection;
       return nextSelection;
-    }; // Assigning this to a constant so that Flow knows it can't change.
+    }; 
 
-
-    // Assigning this to a constant so that Flow knows it can't change.
     var maybeGetServerSnapshot = getServerSnapshot === undefined ? null : getServerSnapshot;
 
     var getSnapshotWithSelector = function () {
@@ -493,16 +475,16 @@ function useSyncExternalStoreWithSelector(subscribe, getSnapshot, getServerSnaps
 
 ```
 
-上述代码从原理来说就是一个增强版的`useSyncExternalStore`主要是对其第二个参数进行增强，前面说过`useSyncExternalStore`每次外部数据变动，更新时会调用第二个参数返回的快照来对比，如果不一致就重新渲染，
-例如：
+上述代码从原理来说就是一个增强版的`useSyncExternalStore`主要是对其第二个参数进行增强，`useSelector`第一个参数经过处理变成`getSelection = _useMemo[0]`然后传递给`useSyncExternalStore`的第二个参数
 
-`useSyncExternalStore(subscribe,selector)`
-`const {a,b} = useSyncExternalStore(subscribe,(state)=>({a:state.a,b:state.b}))`这里第二个参数`selector`函数总是返回一个新的对象，所以每次调用更新函数无论数据store有没变化，页面总是渲染更新,那么怎么能够在a,b数据不变情况下就算`selector`返回新对象，页面也不会更新
+前面说过`useSyncExternalStore`每次渲染前后会调用第二个参数返回的快照来对比，如果不一致就重新渲染，
+例如`const {a,b} = useSyncExternalStore((state)=>({a:state.a,b:state.b}))`,像这样使用进入页面就会报错的，因为每次都是返回一个新对象
+
+`useSelector`的做法是劫持了传进来的参数`selector`,使用闭包保存一份快照备份`prevSelection`并返回给`useSyncExternalStore`内部,当我的数据满足上面两个条件就返回`prevSelection`,而不是返回一个新的对象，用此方法避免重复渲染,所以使用 `const {a,b} = useSelector((state)=>({a:state.a,b:state.b}))`进入页面时是不会报错的，因为这里满足条件一，此外有了`isEqual`函数我们可以对返回的数据快照做自定义的对比，比如返回的是对象，可以对渲染前后的两个对象进行深对比（react-redux提供的对应函数[shallowEqual](https://github.com/reduxjs/react-redux/blob/master/src/utils/shallowEqual.ts)），一样的话也返回`prevSelection`这样就可以避免store外部数据其他key值更新时引起不必要的更新
+
+ 
 
 
 
 
 
-
-<!-- 
-相比`useSyncExternalStore`, `subscribe`是通过`useContext`传递给内部的`useSyncExternalStore`函数，`useSelector`第一个参数跟`useSyncExternalStore`第二个参数是类似的都是返回外部数据快照，这里的第二个参数`isEqual`函数返回`boolean`,来决定是否要渲染，`useSyncExternalStore`内部会先记录一个备份快照来跟下一次渲染时获取的快照做对比，`useSelector`内部也记录了一个备份快照，当`isEqual`自定义函数对比后发现一致， -->
